@@ -61,7 +61,7 @@ public class VideoEditorPlugin extends Plugin {
     }
 
     public void editLitr(PluginCall call) {
-        String path = call.getString("path");
+        String path = getRealPathFromURI(Uri.parse(call.getString("path")));
         JSObject trim = call.getObject("trim", new JSObject());
         JSObject transcode = call.getObject("transcode", new JSObject());
 
@@ -150,7 +150,7 @@ public class VideoEditorPlugin extends Plugin {
 
     @PluginMethod
     public void thumbnail(PluginCall call) {
-        String path = call.getString("path");
+        String path = getRealPathFromURI(Uri.parse(call.getString("path")));
         int atMs = call.getInt("at", 0);
         int width = call.getInt("width", 0);
         int height = call.getInt("height", 0);
@@ -242,5 +242,45 @@ public class VideoEditorPlugin extends Plugin {
         ret.put("size", file.length());
 
         return ret;
+    }
+
+    private String getRealPathFromURI(Uri uri) {
+        if (uri.getScheme() != null && uri.getScheme().equals("file")) {
+            return uri.getPath();
+        }
+
+        if (uri.getScheme() != null && uri.getScheme().equals("content")) {
+            try {
+                String extension = getExtensionFromMimeType(uri);
+                InputStream inputStream = getContext().getContentResolver().openInputStream(uri);
+                if (inputStream == null) return null;
+
+                File tempFile = File.createTempFile("video_editor_", extension, getContext().getCacheDir());
+                FileOutputStream outputStream = new FileOutputStream(tempFile);
+
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+
+                outputStream.close();
+                inputStream.close();
+
+                return tempFile.getAbsolutePath();
+            } catch (Exception e) {
+                Log.e(TAG, "Error reading content:// URI", e);
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private String getExtensionFromMimeType(Uri uri) {
+        String type = getContext().getContentResolver().getType(uri);
+        if (type == null) return ".mp4";
+        return MimeTypeMap.getSingleton().getExtensionFromMimeType(type) != null ?
+                "." + MimeTypeMap.getSingleton().getExtensionFromMimeType(type) : ".mp4";
     }
 }
